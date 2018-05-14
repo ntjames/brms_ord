@@ -18,7 +18,6 @@ posterior_interval(mod3)
 
 }
 
-
 # modified from Liu et al. sim code
 generate.data.2 <- function(seed=1, n=200, p=0.5, alpha=0, beta=c(1, -0.5), sigma=1){
   set.seed(seed)
@@ -45,12 +44,12 @@ fit
 
 
 #true dist. for z1=0
-norm_cdf_z10<-plot(function(x) pnorm(x,0,1),-2.3,3.6)
-n_cdf_0<-data.frame(yval=norm_cdf_z10$x, cdf=norm_cdf_z10$y)
+norm_cdf_z10 <- plot(function(x) pnorm(x,0,1),-2.3,3.6)
+n_cdf_0 <- data.frame(yval=norm_cdf_z10$x, cdf=norm_cdf_z10$y)
 
 #true dist. for z1=1
-norm_cdf_z11<-plot(function(x) pnorm(x,2,1),-2.3,3.6)
-n_cdf_1<-data.frame(yval=norm_cdf_z11$x, cdf=norm_cdf_z11$y)
+norm_cdf_z11 <- plot(function(x) pnorm(x,2,1),-2.3,3.6)
+n_cdf_1 <- data.frame(yval=norm_cdf_z11$x, cdf=norm_cdf_z11$y)
 
 #inverse logit
 #expit <- function(y) exp(y)/(1+exp(y))
@@ -159,6 +158,25 @@ fff_dat<-fff %>% group_by(Var1) %>%
   ungroup() %>% mutate(yval=truey)
 
 
+fff %>% filter(Var3=="A") %>% summary(mn=mean(Freq))
+fff %>% group_by(Var3) %>% summarize(mn=mean(Freq),sd=sd(Freq))
+
+fy_z0_brm<-predict(fit,newdata=data.frame(z1=0))
+fy_z1_brm<-predict(fit,newdata=data.frame(z1=1))
+
+Fy_z0<-cumsum(fy_z0_brm)
+Fy_z1<-cumsum(fy_z1_brm)
+
+cdfdat_brms<-data.frame(cbind(yval=truey,cdf_0=Fy_z0,cdf_1=Fy_z1))
+
+ggplot(cdfdat_brms)+
+  geom_step(aes(x=yval,y=cdf_0))+
+  geom_step(aes(x=yval,y=cdf_1))+ 
+  geom_line(data=n_cdf_0,aes(x=yval,y=cdf),color="blue") + 
+  geom_line(data=n_cdf_1,aes(x=yval,y=cdf),color="blue")
+
+
+
 
 }
 
@@ -194,44 +212,58 @@ getCDF<-function(brmfit,newdata,...){
   
 }
 
-getCDF(fit,newdata=data.frame(z1=0))
+cdf_0<-getCDF(fit,newdata=data.frame(z1=0)) %>% mutate(z1=0)
+cdf_1<-getCDF(fit,newdata=data.frame(z1=1)) %>% mutate(z1=1)
+
+cdf <- rbind(cdf_0,cdf_1)
 
 #! see ggalt stat=stepribbon or RcmdrPlugin.KMggplot2 geom_stepribbon for stepped ribbon
 #! google: geom_ribbon geom_step
 
-fff_dat %>% ggplot()+
-  geom_ribbon(aes(x=yval, ymin=qnt2.5,ymax=qnt97.5),fill="grey30",alpha=0.4)+
-  geom_step(aes(x=yval,y=mn))
-
-
-fff %>% filter(Var3=="A") %>% summary(mn=mean(Freq))
-
-fff %>% group_by(Var3) %>% summarize(mn=mean(Freq),sd=sd(Freq))
-
-
+cdf %>% ggplot(aes(group=z1))+
+  geom_ribbon(aes(x=yval, ymin=cdf_q2.5,ymax=cdf_q97.5),fill="grey30", alpha=0.4)+
+  geom_step(aes(x=yval,y=mn_cdf))+
+  geom_line(data=n_cdf_0,aes(x=yval,y=cdf),color="blue",inherit.aes = FALSE) + 
+  geom_line(data=n_cdf_1,aes(x=yval,y=cdf),color="blue",inherit.aes = FALSE)
 
 
 # how are %tile derived? what is relationship to Est.Error
 
 # could get SE of F_y = G^{-1}(alpha_i-beta X) using delta method
 
-fy_z0_brm<-predict(fit,newdata=data.frame(z1=0))
-fy_z1_brm<-predict(fit,newdata=data.frame(z1=1))
-
-Fy_z0<-cumsum(fy_z0_brm)
-Fy_z1<-cumsum(fy_z1_brm)
-
-cdfdat_brms<-data.frame(cbind(yval=truey,cdf_0=Fy_z0,cdf_1=Fy_z1))
-
-ggplot(cdfdat_brms)+
-  geom_step(aes(x=yval,y=cdf_0))+
-  geom_step(aes(x=yval,y=cdf_1))+ 
-  geom_line(data=n_cdf_0,aes(x=yval,y=cdf),color="blue") + 
-  geom_line(data=n_cdf_1,aes(x=yval,y=cdf),color="blue")
-
 
 ## -- estimate conditional mean -- ##
 
+getMean<-function(brmfit,newdata,...){
+  require(dplyr)
+  
+  truey <- as.numeric( levels(brmfit$data$y) )
+  
+  fitvals <- fitted(brmfit,newdata=newdata,summary=FALSE,...)
+  
+  # Var1 is MCMC draw, 
+  # Var2 is same for all (can be dropped),
+  # Var3 is intercepts (alpha_1, alpha_2, etc.)
+  fv_tab <- as.data.frame.table(fitvals) %>% select(-Var2)
+  
+  n_samp<-nsamples(fit)
+  
+  fv_tab %>% arrange(Var1) %>% 
+    mutate(y=rep(truey,n_samp),fy_Py=Freq*y) %>% group_by(Var1) %>% 
+    summarize(mn=sum(fy_Py))  %>% ungroup() %>%
+    summarize(mean_mn=mean(mn),
+              med_mn=median(mn),
+              sd_mn=sd(mn),
+              mn_q2.5=quantile(mn,probs=0.025),
+              mn_q97.5=quantile(mn,probs=0.975)) 
+  
+}
+
+getMean(fit,newdata=data.frame(z1=0))
+getMean(fit,newdata=data.frame(z1=1))
+
+
+if (0){
 #f(y_1)=F(y_1) and f(y_i)=F(y_i)-F(y_i-1) for i>1
 fy_z0<-c(cdfdat_all$cdf_0[1],diff(cdfdat_all$cdf_0))
 
@@ -272,7 +304,19 @@ qplot(means_z1)
 
 
 # with brms
+fy_z0_brm<-predict(fit,newdata=data.frame(z1=0))
+fy_z1_brm<-predict(fit,newdata=data.frame(z1=1))
+
+
 sum(truey*fy_z0_brm)
 sum(truey*fy_z1_brm)
 
+}
+
 ## -- estimate conditional quantiles -- ##
+
+
+getQuantile<-function(brmfit,newdata,q,...){
+  
+  
+}
