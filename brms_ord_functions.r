@@ -4,20 +4,6 @@ library(brms)
 library(rms)
 library(dplyr)
 
-if (0){
-load("/home/nathan/Dropbox/njames/school/PhD/ra/brms/brms_ord_sim3.RData")
-
-#keep dat3, mod3 to develop functions
-drp<-ls()[!ls() %in% c("dat3","mod3","times","levs","generate.data.1")]
-rm(list=drp)
-
-posterior_summary(mod3,"Intercept")
-posterior_samples(mod3,"Intercept")
-posterior_table(predict(mod3,summary=FALSE)) 
-posterior_interval(mod3)
-
-}
-
 # modified from Liu et al. sim code
 generate.data.2 <- function(seed=1, n=200, p=0.5, alpha=0, beta=c(1, -0.5), sigma=1){
   set.seed(seed)
