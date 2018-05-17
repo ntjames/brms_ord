@@ -37,11 +37,39 @@ dat100levs$y <- factor(dat100levs$y)
 # call this once to distribute chains across cpu cores:
 options(mc.cores=parallel::detectCores())
 
-fit<-brm(as.numeric(y) ~ z1, data=dat100levs, family=cumulative("logit"),
+#possible links: "logit", "probit", "probit_approx", "cloglog", "cauchit"
+brm_fit_logit<-brm(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="logit"),
+         control=list(adapt_delta=0.95))
+
+if (0){
+#! get error using probit, probit_approx, cloglog
+#Rejecting initial value:
+#  Log probability evaluates to log(0), i.e. negative infinity.
+#  Stan can't start sampling from this initial value.
+# --> check link_disc; link for discrimination in ordinal models
+# --> check inits; probit, probit_approx, cloglog don't work with inits="0"
+
+brm_fit_probit<-brm(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit"),
+         control=list(adapt_delta=0.95))
+
+make_stancode(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit"))
+make_standata(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit"))
+
+brm_fit_probit_app<-brm(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit_approx"),
+         control=list(adapt_delta=0.95))
+
+brm_fit_cloglog<-brm(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="cloglog"),
+         control=list(adapt_delta=0.95))
+
+#! cauchit takes an extremely long time (> 1 hr), but works
+# link_disc = "identity"
+if(0){
+fit<-brm(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="cauchit"),
          control=list(adapt_delta=0.95))
 fit
+}
 
-
+}
 
 #true dist. for z1=0
 norm_cdf_z10 <- plot(function(x) pnorm(x,0,1),-2.3,3.6)
