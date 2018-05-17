@@ -36,8 +36,11 @@ if (0){
 # --> check inits; probit, probit_approx, cloglog don't work with inits="0"
 
 brm_fit_probit<-brm(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit"),
-         control=list(adapt_delta=0.95))
+         control=list(adapt_delta=0.95), init_r=0.00001,
+         prior=c(prior(student_t(3,0,1),class="Intercept"),
+                 prior(normal(0,1),class="b")) )
 
+get_prior(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit"))
 make_stancode(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit"))
 make_standata(as.numeric(y) ~ z1, data=dat100levs, family=cumulative(link="probit"))
 
