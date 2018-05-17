@@ -58,16 +58,15 @@ fit
 }
 
 #true dist. for z1=0
-norm_cdf_z10 <- plot(function(x) pnorm(x,0,1),-2.3,3.6)
+norm_cdf_z10 <- curve(pnorm(x,0,1),-2.3,3.6)
 n_cdf_0 <- data.frame(yval=norm_cdf_z10$x, cdf=norm_cdf_z10$y)
 
 #true dist. for z1=1
-norm_cdf_z11 <- plot(function(x) pnorm(x,2,1),-2.3,3.6)
+norm_cdf_z11 <- curve(pnorm(x,2,1),-2.3,3.6)
 n_cdf_1 <- data.frame(yval=norm_cdf_z11$x, cdf=norm_cdf_z11$y)
 
 #inverse logit
 #expit <- function(y) exp(y)/(1+exp(y))
-
 
 # get inverse link function
 fit$formula$family$linkinv()
@@ -217,7 +216,7 @@ getCDF<-function(brmfit,newdata,...){
   fv_tab %>% group_by(Var1) %>% mutate(cdf=cumsum(Freq)) %>% 
     ungroup() %>%
     group_by(Var3) %>% 
-    summarize(mn_cdf=mean(cdf),
+    dplyr::summarize(mn_cdf=mean(cdf),
               med_cdf=median(cdf),
               cdf_q2.5=quantile(cdf,probs=0.025),
               cdf_q97.5=quantile(cdf,probs=0.975)) %>% 
@@ -226,8 +225,8 @@ getCDF<-function(brmfit,newdata,...){
   
 }
 
-cdf_0<-getCDF(fit,newdata=data.frame(z1=0)) %>% mutate(z1=0)
-cdf_1<-getCDF(fit,newdata=data.frame(z1=1)) %>% mutate(z1=1)
+cdf_0<-getCDF(brm_fit_logit,newdata=data.frame(z1=0)) %>% mutate(z1=0)
+cdf_1<-getCDF(brm_fit_logit,newdata=data.frame(z1=1)) %>% mutate(z1=1)
 
 cdf <- rbind(cdf_0,cdf_1)
 
@@ -260,12 +259,12 @@ getMean<-function(brmfit,newdata,...){
   # Var3 is intercepts (alpha_1, alpha_2, etc.)
   fv_tab <- as.data.frame.table(fitvals) %>% select(-Var2)
   
-  n_samp<-nsamples(fit)
+  n_samp<-nsamples(brmfit)
   
   fv_tab %>% arrange(Var1) %>% 
     mutate(y=rep(truey,n_samp),fy_Py=Freq*y) %>% group_by(Var1) %>% 
-    summarize(mn=sum(fy_Py))  %>% ungroup() %>%
-    summarize(mean_mn=mean(mn),
+    dplyr::summarize(mn=sum(fy_Py))  %>% ungroup() %>%
+    dplyr::summarize(mean_mn=mean(mn),
               med_mn=median(mn),
               sd_mn=sd(mn),
               mn_q2.5=quantile(mn,probs=0.025),
@@ -273,8 +272,8 @@ getMean<-function(brmfit,newdata,...){
   
 }
 
-getMean(fit,newdata=data.frame(z1=0))
-getMean(fit,newdata=data.frame(z1=1))
+getMean(brm_fit_logit,newdata=data.frame(z1=0))
+getMean(brm_fit_logit,newdata=data.frame(z1=1))
 
 
 if (0){
