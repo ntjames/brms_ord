@@ -111,12 +111,14 @@ cdf <- rbind(cdf_0,cdf_1)
 #! see ggalt stat=stepribbon or RcmdrPlugin.KMggplot2 geom_stepribbon for stepped ribbon
 #! google: geom_ribbon geom_step
 
+png("cdf1.png")
 cdf %>% ggplot(aes(group=z1))+
   geom_ribbon(aes(x=yval, ymin=cdf_q2.5,ymax=cdf_q97.5),fill="grey30", alpha=0.4)+
   geom_step(aes(x=yval,y=mn_cdf))+
   geom_line(data=n_cdf_0,aes(x=yval,y=cdf),color="blue",inherit.aes = FALSE) + 
-  geom_line(data=n_cdf_1,aes(x=yval,y=cdf),color="blue",inherit.aes = FALSE)
-
+  geom_line(data=n_cdf_1,aes(x=yval,y=cdf),color="blue",inherit.aes = FALSE) +
+  xlab("") + ylab("Conditional CDF")
+dev.off()
 
 # how are %tile derived? what is relationship to Est.Error
 
