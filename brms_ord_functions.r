@@ -4,6 +4,15 @@ library(brms)
 library(rms)
 library(dplyr)
 
+#!!! To do !!!#
+# change Mean and Quantile functions to output samples rather than summaries
+# 1. add exceedance probability function
+# 2. add summary and plot methods (Predict method with fun= ??)
+# --> add summ= option to get either samples if FALSE or summary if TRUE
+# --> summary method should allow user to specify probability statements
+# --> i.e. P(beta_1>0), P(1<beta_2<3), P(beta_2-beta_1<0), etc.
+# run orm tests, exs for brm functions - make sure results are similar
+
 # modified from Liu et al. sim code
 generate.data.2 <- function(seed=1, n=200, p=0.5, alpha=0, beta=c(1, -0.5), sigma=1){
   set.seed(seed)
@@ -98,7 +107,7 @@ lfunc<-function(x){
 # --> just get posterior distribution rather than summary??
 # how are %tile derived? what is relationship to Est.Error
 
-getCDF<-function(brmfit,newdata,...){
+getCDF<-function(brmfit,newdata,summ=TRUE,...){
   require(dplyr)
   
   #check that cumulative model used
@@ -120,23 +129,32 @@ getCDF<-function(brmfit,newdata,...){
   fv_tab<-as.data.frame.table(fitvals)
   
   #within each covar group (Var2) and MCMC sample (Var1), get cdf
-  fv_tab %>% group_by(Var2, Var1) %>% mutate(cdf=cumsum(Freq)) %>% 
-    ungroup() %>%
-    group_by(Var2, Var3) %>% 
-    dplyr::summarize(mn_cdf=mean(cdf),
-              med_cdf=median(cdf),
-              cdf_q2.5=quantile(cdf,probs=0.025),
-              cdf_q97.5=quantile(cdf,probs=0.975)) %>% 
-    ungroup() %>% mutate(yval=rep(truey,nrow(newdata))) %>%
-    full_join(., nd, by="Var2")
+  cdf_vals <- fv_tab %>% group_by(Var2, Var1) %>% mutate(cdf=cumsum(Freq))
+  
+  if (summ){
+  cdf_summ<-cdf_vals %>% 
+      ungroup() %>%
+      group_by(Var2, Var3) %>% 
+      dplyr::summarize(mn_cdf=mean(cdf),
+                       med_cdf=median(cdf),
+                       cdf_q2.5=quantile(cdf,probs=0.025),
+                       cdf_q97.5=quantile(cdf,probs=0.975)) %>% 
+      ungroup() %>% mutate(yval=rep(truey,nrow(newdata))) %>%
+      full_join(., nd, by="Var2")
+    return(cdf_summ)
+  } else {
+    #! append newdata info??
+    return(cdf_vals)
+  }
   
 }
 
-cond_cdf<-getCDF(brm_fit_logit,newdata=data.frame(z1=c(0,1)))
+cond_cdf_samps<-getCDF(brm_fit_logit,newdata=data.frame(z1=c(0,1)),summ=FALSE)
+cond_cdf_summ<-getCDF(brm_fit_logit,newdata=data.frame(z1=c(0,1)))
 
 #! see ggalt stat=stepribbon or RcmdrPlugin.KMggplot2 geom_stepribbon for stepped ribbon
 #! google: geom_ribbon geom_step
-cond_cdf %>% ggplot(aes(group=z1))+
+cond_cdf_summ %>% ggplot(aes(group=z1))+
   geom_ribbon(aes(x=yval, ymin=cdf_q2.5,ymax=cdf_q97.5),fill="grey30", alpha=0.4)+
   geom_step(aes(x=yval,y=mn_cdf))+
   geom_line(data=n_cdf_0,aes(x=yval,y=cdf),color="blue",inherit.aes = FALSE) + 
@@ -146,7 +164,7 @@ cond_cdf %>% ggplot(aes(group=z1))+
 ## -- estimate conditional mean -- ##
 
 # just get posterior dist and post-process to get intervals, etc?
-getMean<-function(brmfit,newdata,...){
+getMean<-function(brmfit,newdata,summ=TRUE,...){
   require(dplyr)
   
   truey <- as.numeric( levels(brmfit$data$y) )
@@ -162,21 +180,30 @@ getMean<-function(brmfit,newdata,...){
   
   n_samp<-nsamples(brmfit)
   
-  fv_tab %>% arrange(Var2, Var1) %>% 
+  mn_vals<-fv_tab %>% arrange(Var2, Var1) %>% 
     mutate(y=rep(truey,n_samp*nrow(nd)),fy_Py=Freq*y) %>% 
     group_by(Var2, Var1) %>% 
-    dplyr::summarize(mn=sum(fy_Py)) %>%
-    dplyr::summarize(mean_mn=mean(mn),
-                     med_mn=median(mn),
-                     sd_mn=sd(mn),
-                     mn_q2.5=quantile(mn,probs=0.025),
-                     mn_q97.5=quantile(mn,probs=0.975)) %>%
-    full_join(., nd, by="Var2")
-
+    dplyr::summarize(mn=sum(fy_Py))
+  
+  if (summ){
+  mn_summ<-mn_vals %>%
+      dplyr::summarize(mean_mn=mean(mn),
+                       med_mn=median(mn),
+                       sd_mn=sd(mn),
+                       mn_q2.5=quantile(mn,probs=0.025),
+                       mn_q97.5=quantile(mn,probs=0.975)) %>%
+      full_join(., nd, by="Var2")
+    return(mn_summ)
+  } else {
+    #! append variable info
+    return(mn_vals)
+  }
+  
 }
 
-cond_mean<-getMean(brm_fit_logit,newdata=data.frame(z1=c(0,1)) )
-cond_mean
+cond_mean_samps <- getMean(brm_fit_logit,newdata=data.frame(z1=c(0,1)), summ=FALSE )
+cond_mean_summ <- getMean(brm_fit_logit,newdata=data.frame(z1=c(0,1)) )
+cond_mean_summ
 
 ## -- estimate conditional quantiles -- ##
 
@@ -185,7 +212,7 @@ cond_mean
 # --> add multiple probs?? - no, just get function for 1 and vectorize??
 # add fix for low quantiles (e.g. 0.0001)
 
-getQuantile<-function(brmfit,newdata,q,...){
+getQuantile<-function(brmfit,newdata,q,summ=TRUE,...){
   require(dplyr)
 
   truey <- as.numeric( levels(brmfit$data$y) )
@@ -199,7 +226,7 @@ getQuantile<-function(brmfit,newdata,q,...){
   # Var3 is intercepts (alpha_1, alpha_2, etc.)
   fv_tab<-as.data.frame.table(fitvals) 
   
-  out<-fv_tab %>% group_by(Var2, Var1) %>% 
+  qtile_vals<-fv_tab %>% group_by(Var2, Var1) %>% 
     mutate(cdf=cumsum(Freq),
            idx.1 = max(which(cdf<=q)),
            idx.2 = min(which(cdf>=q)),
@@ -211,20 +238,29 @@ getQuantile<-function(brmfit,newdata,q,...){
            idx.y1=ifelse(idx.1==-Inf,-Inf,truey[idx.1]),
            idx.y2=ifelse(idx.2==-Inf,-Inf,truey[idx.2]),
            qtile=ifelse(idx.1==idx.2,idx.y1,
-                        (idx.y2-idx.y1)/(idx.y2.cdf - idx.y1.cdf)*(q-idx.y1.cdf) + idx.y1))  %>%
-    group_by(Var2) %>% 
-    dplyr::summarize(mean_qtile=mean(qtile),
-                     med_qtile=median(qtile),
-                     sd_qtile=sd(qtile),
-                     qtile_q2.5=quantile(qtile,probs=0.025),
-                     qtile_q97.5=quantile(qtile,probs=0.975)) %>%
-    full_join(., nd, by="Var2")
+                        (idx.y2-idx.y1)/(idx.y2.cdf - idx.y1.cdf)*(q-idx.y1.cdf) + idx.y1)) 
+  if (summ){
+   qtile_summ <- qtile_vals %>%
+      group_by(Var2) %>% 
+      dplyr::summarize(mean_qtile=mean(qtile),
+                       med_qtile=median(qtile),
+                       sd_qtile=sd(qtile),
+                       qtile_q2.5=quantile(qtile,probs=0.025),
+                       qtile_q97.5=quantile(qtile,probs=0.975)) %>%
+      full_join(., nd, by="Var2")
+    return(qtile_summ)
+  } else {
+    #! append nd vars, keep other intermediary vars??
+    qtile_vals_out<- qtile_vals %>% select(Var1, Var2, Var3, qtile)
+    return(qtile_vals_out)
+  }
   
-  return(out)
 }
 
-cond_med<-getQuantile(brm_fit_logit,newdata=data.frame(z1=c(0,1)),q=0.5)
-cond_med
+
+cond_med_samps<-getQuantile(brm_fit_logit,newdata=data.frame(z1=c(0,1)),q=0.5, summ=FALSE)
+cond_med_summ<-getQuantile(brm_fit_logit,newdata=data.frame(z1=c(0,1)),q=0.5)
+cond_med_summ
 
 
 if (0){
